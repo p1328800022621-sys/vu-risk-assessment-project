@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ฟอร์มประเมินความเสี่ยง | มหาวิทยาลัยวงษ์ชวลิตกุล</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Supabase JS SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        vuOrange: { 50: '#fff7ed', 100: '#ffeedb', 500: '#F26522', 600: '#e14a0b' },
+                        vuSlate: { 50: '#f6f8fa', 100: '#eaeef2', 200: '#d5dbe3', 800: '#3e455c', 950: '#242733' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', 'Prompt', sans-serif; }
+        
+        /* สไตล์สำหรับข้อความแนวตั้งในตาราง */
+        .vertical-text {
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        /* ตั้งค่าการพิมพ์ (Print CSS) */
+        @media print {
+            @page { size: landscape; margin: 10mm; } /* บังคับหน้ากระดาษแนวนอน */
+            body { background-color: white; color: black; }
+            .no-print { display: none !important; } /* ซ่อนฟอร์มและปุ่มตอนปริ้น */
+            .print-area { display: block !important; width: 100%; }
+            
+            /* แต่งตารางตอนปริ้นให้เส้นคมชัดแบบทางการ */
+            table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+            th, td { border: 1px solid #000 !important; padding: 4px 6px; }
+            th { background-color: #f0f0f0 !important; -webkit-print-color-adjust: exact; }
+            
+            /* ลบสีพื้นหลังและปรับสีข้อความให้เป็นขาวดำสำหรับตารางทางการ */
+            .badge-risk { background: none !important; border: 1px solid #000; color: #000 !important; padding: 2px 4px; }
+        }
+    </style>
+</head>
+<body class="bg-vuSlate-50 text-vuSlate-900 min-h-screen p-4 sm:p-8">
+
+    <!-- ========================================== -->
+    <!-- ส่วนที่ 1: ฟอร์มกรอกข้อมูล (จะถูกซ่อนตอนสั่งพิมพ์) -->
+    <!-- ========================================== -->
+    <div class="max-w-5xl mx-auto bg-white p-6 sm:p-8 rounded-2xl shadow-lg border border-vuSlate-100 mb-8 no-print">
+        <div class="flex justify-between items-center border-b border-vuSlate-100 pb-4 mb-6">
+            <h2 class="text-2xl font-bold text-vuSlate-950">
+                <i class="fas fa-edit text-vuOrange-500 mr-2"></i> บันทึกข้อมูลประเมินความเสี่ยง
+            </h2>
+            <button onclick="window.print()" class="bg-vuSlate-950 hover:bg-vuSlate-800 text-white px-4 py-2 rounded-lg font-medium transition shadow-md">
+                <i class="fas fa-file-pdf mr-2"></i> พิมพ์ / บันทึกเป็น PDF
+            </button>
+        </div>
+
+        <form id="riskForm" class="grid grid-cols-1 md:grid-cols-2 gap-6" onsubmit="event.preventDefault(); addRiskData();">
+            <!-- ข้อมูลหน่วยงานและหมวดหมู่ -->
+            <div>
+                <label class="block text-sm font-semibold mb-2">หน่วยงานที่ประเมิน</label>
+                <input type="text" id="deptName" value="หน่วยตรวจสอบภายใน" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-vuOrange-500 outline-none">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold mb-2">พันธกิจหลัก (เลือก 1 ข้อ)</label>
+                <select id="missionType" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-vuOrange-500 outline-none bg-white">
+                    <option value="1">1. ด้านการศึกษา</option>
+                    <option value="2">2. ด้านการเงิน</option>
+                    <option value="3">3. ด้านบริการ</option>
+                    <option value="4">4. ด้านกลยุทธ์</option>
+                    <option value="5">5. บริหารจัดการ</option>
+                    //175 เป็นบรรทัดที่ควรใช้คำชุดเดียวกันกับบรรทัดด้านบน
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-semibold mb-2">หมวดหมู่ความเสี่ยง</label>
+                <input type="text" id="riskCategory" placeholder="กรุณากรอกหมวดหมู่ความเสี่ยง"required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-vuOrange-500 outline-none">
+            </div>
+
+            <!-- รายละเอียดความเสี่ยง -->
+            <div class="md:col-span-2">
+                <label class="block text-sm font-semibold mb-2">(3) ความเสี่ยง (Risk)</label>
+                <input type="text" id="riskDesc" placeholder="ยังไม่ได้กรอกความเสี่ยง" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-vuOrange-500 outline-none">
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-semibold mb-2">(4) ปัจจัย/สาเหตุของความเสี่ยง</label>
+                <textarea id="riskCause" rows="3" placeholder="ยังไม่ได้กรอกปัจจัย" required class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-vuOrange-500 outline-none"></textarea>
+            </div>
+
+            <!-- การประเมินคะแนน -->
+            <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <label class="block text-sm font-semibold text-vuOrange-600 mb-2">(5) เลือกระดับโอกาสที่จะเกิด (Likelihood)</label>
+                <select id="likelihood" class="w-full p-3 border border-gray-300 rounded-lg outline-none bg-white font-medium" onchange="previewScore()">
+                    <option value="5">ระดับ 5 - สูงมาก</option>
+                    <option value="4">ระดับ 4 - สูง</option>
+                    <option value="3">ระดับ 3 - ปานกลาง</option>
+                    <option value="2">ระดับ 2 - น้อย</option>
+                    <option value="1" selected>ระดับ 1 - น้อยมาก</option>
+                </select>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <label class="block text-sm font-semibold text-vuOrange-600 mb-2">(6) เลือกระดับผลกระทบ (Impact)</label>
+                <select id="impact" class="w-full p-3 border border-gray-300 rounded-lg outline-none bg-white font-medium" onchange="previewScore()">
+                    <option value="5">ระดับ 5 - รุนแรงมาก</option>
+                    <option value="4">ระดับ 4 - รุนแรง</option>
+                    <option value="3">ระดับ 3 - ปานกลาง</option>
+                    <option value="2">ระดับ 2 - น้อย</option>
+                    <option value="1" selected>ระดับ 1 - น้อยมาก</option>
+                </select>
+            </div>
+
+            <!-- พรีวิวคะแนน และ ปุ่มตกลง -->
+            <div class="md:col-span-2 flex items-center justify-between bg-vuSlate-50 p-4 rounded-xl border border-vuSlate-200">
+                <div>
+                    <span class="text-sm font-semibold text-gray-500 block">ผลการคำนวณเบื้องต้น (L x I)</span>
+                    <div class="text-2xl font-bold text-gray-900 mt-1">
+                        คะแนนรวม: <span id="previewScoreText" class="text-vuOrange-500">1</span> 
+                        <span id="previewLevelText" class="text-sm font-medium ml-2 px-2 py-1 rounded bg-green-100 text-green-700">ต่ำ</span>
+                    </div>
+                </div>
+                <button type="submit" class="bg-vuOrange-500 hover:bg-vuOrange-600 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg">
+                    <i class="fas fa-plus mr-2"></i> เพิ่มลงในตารางรายงาน
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ส่วนที่ 2: ตารางรายงานผล (แสดงผลทั้งบนเว็บและตอนพิมพ์) -->
+    <!-- ========================================== -->
+    <div class="max-w-[95rem] mx-auto bg-white p-2 sm:p-6 rounded-none sm:rounded-2xl shadow-none sm:shadow-lg border-0 sm:border border-vuSlate-100 print-area overflow-x-auto">
+        
+        <div class="mb-4">
+            <h3 class="text-lg font-bold text-blue-800" id="displayDeptName">หน่วยงาน (1) หน่วยตรวจสอบภายใน</h3>
+        </div>
+
+        <table class="w-full border-collapse border border-gray-400 text-xs text-gray-800 min-w-[1000px]">
+            <!-- หัวตารางตามรูปแบบทางการ -->
+            <thead>
+                <tr class="bg-gray-100 text-center">
+                    <th rowspan="2" colspan="5" class="border border-gray-400 p-2 w-16">(2) พันธกิจ / ประเภทความเสี่ยง</th>
+                    <th rowspan="2" class="border border-gray-400 p-2 w-48">(3) ความเสี่ยง</th>
+                    <th rowspan="2" class="border border-gray-400 p-2 w-64">(4) ปัจจัย/สาเหตุของความเสี่ยง</th>
+                    <th colspan="3" class="border border-gray-400 p-2">(5) เกณฑ์โอกาส (Likelihood)</th>
+                    <th colspan="3" class="border border-gray-400 p-2">(6) เกณฑ์ผลกระทบ (Impact)</th>
+                    <th colspan="4" class="border border-gray-400 p-2">(7) ประเมินก่อนควบคุม</th>
+                </tr>
+                <tr class="bg-gray-100 text-center">
+                    <!-- ข้อมูลโอกาส -->
+                    <th class="border border-gray-400 p-2 w-32">คำอธิบาย</th>
+                    <th class="border border-gray-400 p-1 w-12">โอกาส<br>ที่จะเกิด</th>
+                    <th class="border border-gray-400 p-1 w-10">ระดับ</th>
+                    <!-- ข้อมูลผลกระทบ -->
+                    <th class="border border-gray-400 p-2 w-32">คำอธิบาย</th>
+                    <th class="border border-gray-400 p-1 w-12">ผลกระทบ</th>
+                    <th class="border border-gray-400 p-1 w-10">ระดับ</th>
+                    <!-- การคำนวณ -->
+                    <th class="border border-gray-400 p-1 w-10 vertical-text">โอกาส</th>
+                    <th class="border border-gray-400 p-1 w-10 vertical-text">ผลกระทบ</th>
+                    <th class="border border-gray-400 p-1 w-12 vertical-text">คะแนน (L x I)</th>
+                    <th class="border border-gray-400 p-2 w-20 vertical-text">ระดับความเสี่ยง</th>
+                </tr>
+                <!-- แถวหมวดหมู่ของพันธกิจย่อยแนวดิ่ง -->
+                <tr class="bg-gray-50 text-center text-[10px]">
+                    <th class="border border-gray-400 p-1 vertical-text h-32">1) ด้านการศึกษา</th>
+                    <th class="border border-gray-400 p-1 vertical-text">2) ด้านบริการ</th>
+                    <th class="border border-gray-400 p-1 vertical-text">3) ด้านบริการ</th>
+                    <th class="border border-gray-400 p-1 vertical-text">4) ด้านกลยุทธ์</th>
+                    <th class="border border-gray-400 p-1 vertical-text">5) บริหารจัดการ</th>
+                    <th colspan="11" class="border border-gray-400 bg-white"></th>
+                </tr>
+            </thead>
+            
+            <tbody id="tableBody">
+                <!-- ข้อมูลจะถูกเพิ่มที่นี่ผ่าน JavaScript -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- ส่วนที่ 3: ระบบคำนวณและประมวลผล (JavaScript) -->
+    <!-- ========================================== -->
+    <script>
+        //ข้อมูลเชื่อมต่อdatabase
+        const SUPABASE_URL = 'https://ymzerxyhmbtyijeqfyol.supabase.co/rest/v1/';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltemVyeHlobWJ0eWlqZXFmeW9sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMzk0NDcsImV4cCI6MjA5OTYxNTQ0N30.pYQ-QeMyymIja247KP3GOotjEfCOBWF__a8sLHZjghM'; 
+
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let currentCategory = "";
+
+        // ฟังก์ชันคำนวณและแปลงระดับความเสี่ยงเป็นข้อความและสี
+        function getRiskLevelData(score) {
+            if (score >= 15) return { text: "สูงมาก", colorClass: "bg-red-100 text-red-700", levelText: "สูงมาก" };
+            if (score >= 10) return { text: "สูง", colorClass: "bg-orange-100 text-orange-700", levelText: "สูง" };
+            if (score >= 4)  return { text: "ปานกลาง", colorClass: "bg-yellow-100 text-yellow-700", levelText: "ปานกลาง" };
+            return { text: "ต่ำ", colorClass: "bg-green-100 text-green-700", levelText: "ต่ำ" };
+        }
+
+        // ฟังก์ชันพรีวิวคะแนนแบบ Real-time ในกล่องกรอกข้อมูล
+        function previewScore() {
+            const l = parseInt(document.getElementById('likelihood').value);
+            const i = parseInt(document.getElementById('impact').value);
+            const score = l * i;
+            const riskData = getRiskLevelData(score);
+            
+            document.getElementById('previewScoreText').innerText = score;
+            const levelBadge = document.getElementById('previewLevelText');
+            levelBadge.innerText = riskData.text;
+            levelBadge.className = `text-sm font-medium ml-2 px-2 py-1 rounded ${riskData.colorClass}`;
+        }
+
+        let currentCategory = "";
+
+        // ฟังก์ชันเพิ่มข้อมูลลงตาราง
+        function addRiskData() {
+            // 1. ดึงค่าจากฟอร์ม
+            const deptName = document.getElementById('deptName').value;
+            const missionType = parseInt(document.getElementById('missionType').value);
+            const category = document.getElementById('riskCategory').value;
+            const desc = document.getElementById('riskDesc').value;
+            // แปลงการขึ้นบรรทัดใหม่ใน Textarea ให้เป็น <br> ใน HTML
+            const cause = document.getElementById('riskCause').value.replace(/\n/g, '<br>'); 
+            
+            const l_val = parseInt(document.getElementById('likelihood').value);
+            const l_text = document.getElementById('likelihood').options[document.getElementById('likelihood').selectedIndex].text.split(' - ')[1];
+            
+            const i_val = parseInt(document.getElementById('impact').value);
+            const i_text = document.getElementById('impact').options[document.getElementById('impact').selectedIndex].text.split(' - ')[1];
+            
+            // 2. คำนวณคะแนน
+            const score = l_val * i_val;
+            const riskData = getRiskLevelData(score);
+
+            // อัปเดตชื่อหัวตาราง
+            document.getElementById('displayDeptName').innerText = `หน่วยงาน (1) ${deptName}`;
+
+            const tbody = document.getElementById('tableBody');
+
+            // 3. ตรวจสอบว่าต้องสร้างแถว "หมวดหมู่ (Category)" ใหม่หรือไม่
+            if (category !== currentCategory) {
+                currentCategory = category;
+                const catRow = document.createElement('tr');
+                catRow.className = "bg-gray-100 font-bold";
+                catRow.innerHTML = `<td colspan="16" class="border border-gray-400 p-2 text-left">${category}</td>`;
+                tbody.appendChild(catRow);
+            }
+
+            // 4. จัดการเครื่องหมายถูก (✓) ในช่องพันธกิจที่เลือก
+            let missions = ['','','','',''];
+            missions[missionType - 1] = '✓';
+
+            // 5. สร้างแถวข้อมูล (Row) แทรกเข้าไปในตาราง
+            const tr = document.createElement('tr');
+            tr.className = "bg-white text-center align-top";
+            
+            tr.innerHTML = `
+                <!-- พันธกิจ -->
+                <td class="border border-gray-400 p-2">${missions[0]}</td>
+                <td class="border border-gray-400 p-2">${missions[1]}</td>
+                <td class="border border-gray-400 p-2">${missions[2]}</td>
+                <td class="border border-gray-400 p-2">${missions[3]}</td>
+                <td class="border border-gray-400 p-2">${missions[4]}</td>
+                
+                <!-- ความเสี่ยง และ สาเหตุ -->
+                <td class="border border-gray-400 p-2 text-left">${desc}</td>
+                <td class="border border-gray-400 p-2 text-left text-[11px] leading-tight">${cause}</td>
+                
+                <!-- โอกาส -->
+                <td class="border border-gray-400 p-2 text-left text-[11px]">รายละเอียดการเกิดอยู่ในระดับ ${l_text}</td>
+                <td class="border border-gray-400 p-2">${l_text}</td>
+                <td class="border border-gray-400 p-2">${l_val}</td>
+                
+                <!-- ผลกระทบ -->
+                <td class="border border-gray-400 p-2 text-left text-[11px]">ส่งผลกระทบต่อเป้าหมายในระดับ ${i_text}</td>
+                <td class="border border-gray-400 p-2">${i_text}</td>
+                <td class="border border-gray-400 p-2">${i_val}</td>
+                
+                <!-- สรุปผลประเมิน -->
+                <td class="border border-gray-400 p-2">${l_val}</td>
+                <td class="border border-gray-400 p-2">${i_val}</td>
+                <td class="border border-gray-400 p-2 font-bold">${score}</td>
+                <td class="border border-gray-400 p-2">
+                    <span class="badge-risk block w-full rounded py-1 ${riskData.colorClass} text-xs font-semibold">
+                        ความเสี่ยง<br>${riskData.text}
+                    </span>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+
+            // 6. ล้างฟอร์มบางส่วนเพื่อเตรียมกรอกข้อต่อไป
+            document.getElementById('riskDesc').value = '';
+            document.getElementById('riskCause').value = '';
+            document.getElementById('riskDesc').focus();
+        }
+    </script>
+</body>
+</html>
